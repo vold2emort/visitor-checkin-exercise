@@ -112,6 +112,8 @@ feature specification in the repository README:
 - **Type:** Functional (frontend / timezone)
 - **Description:**
 
+  The backend is saving the time in utc not local Asia/Kathmandu timezone, the frontend is responsible for displaying the time by UTC+5:45. The server itself is not saving the local time.
+
   `toISOString()` always converts to UTC, so the displayed clock time is UTC, not the receptionist's local
   time. On the server, `config.time_zone` is never set (api/config/application.rb:36), so `Time.current`
   is UTC and ISO timestamps are serialized with a `Z` suffix. The net effect: for a user in Asia/Kathmandu
