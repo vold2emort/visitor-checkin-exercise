@@ -24,11 +24,11 @@ class Api::VisitorsControllerTest < ActionDispatch::IntegrationTest
     assert_response :created
   end
 
-  test "POST /api/visitors with empty body creates a record" do
-    assert_difference "Visitor.count", 1 do
+  test "POST /api/visitors with empty body is rejected" do
+    assert_no_difference "Visitor.count" do
       post "/api/visitors", params: {}, as: :json
     end
-    assert_response :created
+    assert_response :unprocessable_entity
   end
 
   test "PATCH /api/visitors/:id/check_out sets checked_out_at" do
