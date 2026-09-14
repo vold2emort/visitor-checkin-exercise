@@ -6,6 +6,7 @@ module Api
       page = (params[:page] || 1).to_i
       visitors = Visitor.where(active: true, checked_out_at: nil)
                         .order(:id)
+                        .includes(:host)
                         .offset((page - 1) * PER_PAGE)
                         .limit(PER_PAGE)
 
