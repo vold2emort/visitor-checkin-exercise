@@ -8,7 +8,7 @@ The three fixed defects are:
 
 | Defect | What it is |
 |--------|-----------|
-| Defect 1 | Deactivated users are still surfaced — in the **active list** and in the **repeat-visit search** |
+| Defect 1 | Deactivated users are still surfaced - in the **active list** and in the **repeat-visit search** |
 | Defect 2 | API accepts empty/incomplete visitor records (**no server-side validation**) **and** records/serializes check-in timestamps in **UTC instead of Asia/Kathmandu** |
 | Defect 3 | **N+1 query load** when rendering the active list |
 
@@ -19,7 +19,7 @@ All request specs live in `api/test/requests/visitors_request_test.rb`.
 | Defect | Fix | Request spec | On original `main` | On updated code |
 |--------|-----|--------------|--------------------|-----------------|
 | 1 | `GET /api/visitors` now filters `active: true` **and** `GET /api/visitors/search` now filters `active: true` (checked-out visitors stay selectable for legitimate repeat visits) | "deactivated visitors are not returned by the active list or repeat-visit search" | FAIL - deactivated `Sam Inactive` returned by active list | PASS |
-| 2 | `Visitor` model now requires `full_name`, `company_name`, `purpose`, and `host` (presence validations; `create` already renders `422` when `save` fails) **and** `config.time_zone = "Asia/Kathmandu"` so check-in/check-out timestamps are created and serialized as `+05:45` instead of `Z` (UTC) | "POST /api/visitors validates required fields and records check-in in Kathmandu time" | FAIL — empty/missing-field POST saved a record (201), and timestamps serialized with `Z` (offset 0) | PASS (422 / no row created; valid POST returns `checked_in_at` with `utc_offset` `+05:45`) |
+|  2 | `Visitor` model now requires `full_name`, `company_name`, `purpose`, and `host` (presence validations; `create` already renders `422` when `save` fails), rejects a `host_id` that does not reference an existing host (explicit `host_id` existence check with a dedicated error), **and** `config.time_zone = "Asia/Kathmandu"` so check-in/check-out timestamps are created and serialized as `+05:45` instead of `Z` (UTC) | "POST /api/visitors validates required fields and records check-in in Kathmandu time" | FAIL — empty/missing-field POST saved a record (201), an unknown `host_id` was accepted with a dangling FK, and timestamps serialized with `Z` (offset 0) | PASS (422 / no row created for empty, missing-field, or unknown-host `host_id` with `"host_id": ["must reference an existing host"]`; valid POST returns `checked_in_at` with `utc_offset` `+05:45`) |
 | 3 | `GET /api/visitors` now eager loads hosts with `.includes(:host)` | "GET /api/visitors eager loads hosts instead of issuing an N+1" | FAIL - 21 SQL statements | PASS (2) |
 
 The pre-existing controller test `POST /api/visitors with empty body creates a record`
@@ -30,7 +30,10 @@ the test now asserts `422` and that no record is created.
 contract in two ways.
 1. Invalid/incomplete `POST /api/visitors` requests that previously returned
    `201 Created` (with a persisted record) now return `422 Unprocessable Entity` with
-   `{ "errors": { ... } }`.
+   `{ "errors": { ... } }`. The rejected cases cover empty/incomplete bodies **and** a
+   `host_id` that does not exist — that last one returns the specific error
+   `{ "errors": { "host_id": ["must reference an existing host"] } }` rather than the
+   generic association message.
 2. Valid timestamps change representation: `checked_in_at` / `checked_out_at` are now
    serialized with the `Asia/Kathmandu` offset (`...+05:45`) instead of UTC (`...Z`). The
    underlying instant stored in the database is unchanged, Rails still stores UTC instants
@@ -48,7 +51,7 @@ and `host_id` as required and shows no error feedback on a failed POST, so a fro
    impact (an admin deactivates a record and it stays on the front-desk list / can be booked
    again) and easy to miss, the seed data happens to give every seeded deactivated visitor a
    `checked_out_at` timestamp, so development data masks the bug.
-2. **Defect 2 (no server-side validation + UTC timestamps)**: It is never good for backend to rely that the frontend will send correct data so I chose validation, targeted two server-side gaps that both
+2. **Defect 2 (no server-side validation + UTC timestamps)**: It is never good for backend to rely that the frontend will send correct data so I choose server side validation, targeted two server-side gaps that both
    contradict the spec. (a) The spec requires a full name, company, host, and purpose on every
    registration, but the API happily persisted empty rows; fixing it enforces the registration
    contract . (b) The app is
@@ -112,7 +115,7 @@ substantially larger.
 ## Verification summary
 
 - Request specs: 3 runs, 0 failures (all three fail on `origin/main`, all pass on updated code).
-- Full suite: `bin/rails test` : 12 runs, 39 assertions, 0 failures.
+-  Full suite: `bin/rails test` → 12 runs, 43 assertions, 0 failures.
 
 Files changed:
 - `api/app/controllers/api/visitors_controller.rb` : Defect 1 fixes.

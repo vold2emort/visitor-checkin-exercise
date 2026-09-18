@@ -31,6 +31,15 @@ class Api::VisitorsRequestTest < ActionDispatch::IntegrationTest
     end
     assert_response :unprocessable_entity
 
+    assert_no_difference "Visitor.count" do
+      post "/api/visitors",
+        params: { full_name: "Jane Doe", company_name: "Acme Corp", purpose: "Demo", host_id: 999_999 },
+        as: :json
+    end
+    assert_response :unprocessable_entity
+    assert_equal ["must reference an existing host"], JSON.parse(response.body).dig("errors", "host_id")
+
+
     post "/api/visitors",
       params: { full_name: "Jane Doe", company_name: "Acme Corp", purpose: "Demo", host_id: hosts(:alice).id },
       as: :json
